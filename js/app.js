@@ -27,6 +27,17 @@
     { key: 'sanidad', label: 'Sanidad animal', icon: 'cross', subtitle: 'Vacunaciones y tratamientos veterinarios', group: 'Ganadería' },
     { key: 'reproduccion', label: 'Reproducción', icon: 'heart', subtitle: 'Servicios, diagnóstico de preñez y parición', group: 'Ganadería' },
     { key: 'pesadas', label: 'Pesadas', icon: 'trending', subtitle: 'Seguimiento de peso por categoría', group: 'Ganadería' },
+
+    { key: 'tambo', label: 'Tambo', icon: 'milk', subtitle: 'Resumen de producción lechera', group: 'Tambo' },
+    { key: 'tambos', label: 'Tambos', icon: 'pin', subtitle: 'Ubicación y datos de los establecimientos', group: 'Tambo' },
+    { key: 'produccionLeche', label: 'Producción', icon: 'droplet', subtitle: 'Registro diario de litros y vacas ordeñadas', group: 'Tambo' },
+    { key: 'mapaTambos', label: 'Mapa', icon: 'map', subtitle: 'Ubicación geográfica de los tambos', group: 'Tambo' },
+  ];
+
+  const SECTIONS = [
+    { group: 'Agricultura', label: 'Agricultura', icon: 'sprout' },
+    { group: 'Ganadería', label: 'Ganadería', icon: 'cow' },
+    { group: 'Tambo', label: 'Tambo', icon: 'milk' },
   ];
 
   const VIEW_RENDERERS = {
@@ -46,6 +57,10 @@
     sanidad: renderSanidad,
     reproduccion: renderReproduccion,
     pesadas: renderPesadas,
+    tambo: renderTambo,
+    tambos: renderTambos,
+    produccionLeche: renderProduccionLeche,
+    mapaTambos: renderMapaTambos,
   };
 
   const TIPO_VARIANT = { Cereal: 'neutral', Oleaginosa: 'info', Legumbre: 'success', Hortaliza: 'warning', Forraje: 'muted', Otro: 'neutral' };
@@ -56,6 +71,14 @@
 
   let mapInstance = null;
   let mapMarkers = {};
+
+  const SECTION_STORAGE_KEY = 'agrogestion.activeSection';
+  let activeSection = (() => {
+    const hashKey = (location.hash || '').replace('#/', '').split('?')[0];
+    const route = ROUTES.find((r) => r.key === hashKey);
+    if (route && route.group) return route.group;
+    return localStorage.getItem(SECTION_STORAGE_KEY) || 'Agricultura';
+  })();
 
   const state = {
     route: 'dashboard',
@@ -71,6 +94,8 @@
       sanidad: { tipo: '', categoriaId: '', loteId: '', desde: '', hasta: '' },
       reproduccion: { tipo: '', categoriaId: '', loteId: '', desde: '', hasta: '' },
       pesadas: { categoriaId: '', loteId: '' },
+      tambos: { search: '', estado: '' },
+      produccionLeche: { tamboId: '', turno: '', desde: '', hasta: '' },
     },
   };
 
@@ -113,6 +138,12 @@
     const key = currentRouteKey();
     state.route = key;
     const route = ROUTES.find((r) => r.key === key);
+    if (route.group && route.group !== activeSection) {
+      activeSection = route.group;
+      localStorage.setItem(SECTION_STORAGE_KEY, route.group);
+      renderSectionSwitch();
+      renderNavItems();
+    }
     document.getElementById('viewTitle').textContent = route.label;
     document.getElementById('viewSubtitle').textContent = route.subtitle;
     document.title = `${route.label} · AgroGestión`;
@@ -133,26 +164,47 @@
   }
 
   function renderSidebarNav() {
+    renderSectionSwitch();
+    renderNavItems();
     const nav = document.getElementById('sidebarNav');
-    let lastGroup = null;
-    nav.innerHTML = ROUTES.map((r) => {
-      const groupHeader = r.group !== lastGroup && r.group
-        ? `<span class="nav-group-label">${r.group}</span>`
-        : '';
-      lastGroup = r.group;
-      return `${groupHeader}
-      <button class="nav-item" data-route="${r.key}" type="button">
-        ${UI.icon(r.icon, { size: 18 })}
-        <span>${r.label}</span>
-        <span class="nav-item__count" data-count="${r.key}"></span>
-      </button>`;
-    }).join('');
     nav.addEventListener('click', (e) => {
       const btn = e.target.closest('.nav-item');
       if (!btn) return;
       navigate(btn.dataset.route);
     });
+  }
+
+  function renderNavItems() {
+    const nav = document.getElementById('sidebarNav');
+    const visibleRoutes = ROUTES.filter((r) => !r.group || r.group === activeSection);
+    nav.innerHTML = visibleRoutes.map((r) => `
+      <button class="nav-item" data-route="${r.key}" type="button">
+        ${UI.icon(r.icon, { size: 18 })}
+        <span>${r.label}</span>
+        <span class="nav-item__count" data-count="${r.key}"></span>
+      </button>`).join('');
     updateNavCounts();
+    highlightNav(state.route);
+  }
+
+  function renderSectionSwitch() {
+    const wrap = document.getElementById('sectionSwitch');
+    if (!wrap) return;
+    wrap.innerHTML = SECTIONS.map((s) => `
+      <button type="button" class="section-pill${s.group === activeSection ? ' is-active' : ''}" data-section="${s.group}">
+        ${UI.icon(s.icon, { size: 17 })}
+        <span>${s.label}</span>
+      </button>`).join('');
+    wrap.querySelectorAll('[data-section]').forEach((btn) => btn.addEventListener('click', () => {
+      const group = btn.dataset.section;
+      if (group === activeSection) return;
+      activeSection = group;
+      localStorage.setItem(SECTION_STORAGE_KEY, group);
+      renderSectionSwitch();
+      renderNavItems();
+      const first = ROUTES.find((r) => r.group === group);
+      if (first) navigate(first.key);
+    }));
   }
 
   function updateNavCounts() {
@@ -167,6 +219,8 @@
       sanidad: DB.count('sanidadAnimal'),
       reproduccion: DB.count('reproduccion'),
       pesadas: DB.count('pesadas'),
+      tambos: DB.count('tambos'),
+      produccionLeche: DB.count('produccionLeche'),
     };
     Object.entries(map).forEach(([key, val]) => {
       const el = document.querySelector(`.nav-item__count[data-count="${key}"]`);
@@ -230,6 +284,8 @@
       { key: 'fumigacion', label: 'Nueva fumigación', desc: 'Registrar aplicación', icon: 'droplet' },
       { key: 'cosecha', label: 'Nueva cosecha', desc: 'Registrar resultado', icon: 'basket' },
       { key: 'nota', label: 'Nueva nota', desc: 'Seguimiento de lote', icon: 'note' },
+      { key: 'tambo', label: 'Nuevo tambo', desc: 'Registrar un establecimiento', icon: 'pin' },
+      { key: 'produccion', label: 'Nueva producción', desc: 'Registrar litros del día', icon: 'droplet' },
     ];
     UI.openModal({
       title: 'Nuevo registro',
@@ -257,6 +313,8 @@
       fumigacion: ['fumigaciones', openFumigacionForm],
       cosecha: ['cosechas', openCosechaForm],
       nota: ['notas', openNotaForm],
+      tambo: ['tambos', openTamboForm],
+      produccion: ['produccionLeche', openProduccionForm],
     };
     const [route, opener] = actions[key];
     navigate(route);
@@ -272,7 +330,9 @@
     const fumigaciones = DB.getAll('fumigaciones').map((f) => ({ route: 'fumigaciones', id: f.id, icon: 'droplet', title: f.producto, subtitle: `${loteName(f.loteId)} · ${f.aplicador}`, text: `${f.producto} ${f.aplicador} ${loteName(f.loteId)}`.toLowerCase() }));
     const siembras = DB.getAll('siembras').map((s) => ({ route: 'siembras', id: s.id, icon: 'sprout', title: `${cultivoName(s.cultivoId)} en ${loteName(s.loteId)}`, subtitle: UI.formatDate(s.fecha), text: `${cultivoName(s.cultivoId)} ${loteName(s.loteId)}`.toLowerCase() }));
     const cosechas = DB.getAll('cosechas').map((c) => ({ route: 'cosechas', id: c.id, icon: 'basket', title: `${cultivoName(c.cultivoId)} en ${loteName(c.loteId)}`, subtitle: UI.formatDate(c.fecha), text: `${cultivoName(c.cultivoId)} ${loteName(c.loteId)}`.toLowerCase() }));
-    return [...lotes, ...cultivos, ...notas, ...fumigaciones, ...siembras, ...cosechas];
+    const tambos = DB.getAll('tambos').map((t) => ({ route: 'tambos', id: t.id, icon: 'pin', title: t.nombre, subtitle: t.ubicacion, text: `${t.nombre} ${t.ubicacion}`.toLowerCase() }));
+    const produccion = DB.getAll('produccionLeche').map((p) => ({ route: 'produccionLeche', id: p.id, icon: 'droplet', title: `Producción · ${tamboName(p.tamboId)}`, subtitle: UI.formatDate(p.fecha), text: `${tamboName(p.tamboId)} ${p.fecha}`.toLowerCase() }));
+    return [...lotes, ...cultivos, ...notas, ...fumigaciones, ...siembras, ...cosechas, ...tambos, ...produccion];
   }
 
   function handleGlobalSearch() {
@@ -318,6 +378,7 @@
   function loteName(id) { const l = DB.getById('lotes', id); return l ? l.nombre : '—'; }
   function cultivoName(id) { const c = DB.getById('cultivos', id); return c ? c.nombre : '—'; }
   function categoriaName(id) { const c = DB.getById('categoriasHacienda', id); return c ? c.nombre : '—'; }
+  function tamboName(id) { const t = DB.getById('tambos', id); return t ? t.nombre : '—'; }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
 
   function parseGoogleMapsUrl(text) {
@@ -3247,6 +3308,667 @@
     DB.remove('pesadas', id);
     UI.toast('La pesada fue eliminada.', 'success', 'Pesada eliminada');
     refreshCurrentView();
+  }
+
+  /* ============================================================
+     TAMBO — utilidades compartidas
+     ============================================================ */
+
+  function produccionDelDia(fecha) {
+    return DB.getAll('produccionLeche').filter((p) => p.fecha === fecha);
+  }
+
+  function litrosPorTambo(registros) {
+    const totals = {};
+    registros.forEach((p) => { totals[p.tamboId] = (totals[p.tamboId] || 0) + Number(p.litros || 0); });
+    return totals;
+  }
+
+  function ultimaProduccionPorTambo() {
+    const map = {};
+    DB.getAll('produccionLeche').forEach((p) => {
+      const current = map[p.tamboId];
+      if (!current || new Date(p.fecha) > new Date(current.fecha)) map[p.tamboId] = p;
+    });
+    return map;
+  }
+
+  function produccionActivityHTML(p) {
+    return `<div class="activity-item"><span class="activity-item__dot" style="background:var(--accent-blue)"></span><div class="activity-item__body"><p><b>${UI.formatNumber(p.litros, 0)} L</b> · ${UI.escapeHTML(tamboName(p.tamboId))} · ${UI.formatNumber(p.vacasOrdeñadas)} vaca(s) ordeñadas · ${p.turno}</p><span>${UI.formatDate(p.fecha)} · ${UI.timeAgo(p.fecha)}</span></div></div>`;
+  }
+
+  /* ============================================================
+     TAMBO (resumen)
+     ============================================================ */
+
+  function renderTambo(root) {
+    const tambos = DB.getAll('tambos');
+    const tambosActivos = tambos.filter((t) => t.estado === 'Activo');
+    const hoy = todayISO();
+    const registrosHoy = produccionDelDia(hoy);
+    const litrosHoy = registrosHoy.reduce((sum, p) => sum + Number(p.litros || 0), 0);
+    const vacasHoy = registrosHoy.reduce((sum, p) => sum + Number(p.vacasOrdeñadas || 0), 0);
+    const promedioLVaca = vacasHoy ? litrosHoy / vacasHoy : 0;
+    const dotacionTotal = tambos.reduce((s, t) => s + Number(t.dotacionVacas || 0), 0);
+
+    const ultimos7 = DB.getAll('produccionLeche').filter((p) => {
+      const dias = (Date.now() - new Date(`${p.fecha}T00:00:00`).getTime()) / 86400000;
+      return dias >= 0 && dias < 7;
+    });
+    const litros7 = ultimos7.reduce((sum, p) => sum + Number(p.litros || 0), 0);
+
+    const litrosPorTamboTotal = litrosPorTambo(ultimos7);
+    const ranking = tambos
+      .map((t) => ({ label: t.nombre, value: litrosPorTamboTotal[t.id] || 0 }))
+      .filter((x) => x.value > 0)
+      .sort((a, b) => b.value - a.value);
+    const maxLitros = Math.max(1, ...ranking.map((x) => x.value));
+
+    const ultimaPorTambo = ultimaProduccionPorTambo();
+    const recientes = DB.getAll('produccionLeche').sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).slice(0, 6);
+
+    const statCards = [
+      { icon: 'droplet', tone: 'blue', label: 'Litros hoy', value: litrosHoy, sub: `${registrosHoy.length} registro(s) cargados`, trend: null },
+      { icon: 'cow', tone: 'green', label: 'Vacas ordeñadas hoy', value: vacasHoy, sub: `de ${dotacionTotal} en dotación total`, trend: null },
+      { icon: 'trending', tone: 'amber', label: 'Promedio L/vaca (hoy)', value: promedioLVaca, sub: registrosHoy.length ? 'Según lo cargado hoy' : 'Sin carga de hoy todavía', trend: null },
+      { icon: 'pin', tone: 'sand', label: 'Tambos activos', value: tambosActivos.length, sub: `de ${tambos.length} en total`, trend: null },
+    ];
+
+    root.innerHTML = `
+      <div class="view-header">
+        <div class="view-header__text"><h2>Tambo</h2><p>Resumen de producción lechera</p></div>
+        <div class="view-header__actions"><button class="btn btn--primary" id="addProduccionBtn" type="button">${UI.icon('plus', { size: 15 })}<span>Nueva producción</span></button></div>
+      </div>
+      <div class="stat-grid" style="margin-bottom:18px">${statCards.map(statCardHTML).join('')}</div>
+      <div class="dash-grid">
+        <div class="dash-col">
+          <div class="panel">
+            <div class="panel__header"><div><h3>Litros por tambo</h3><p>Últimos 7 días · ${UI.formatNumber(litros7, 0)} L acumulados</p></div></div>
+            ${ranking.length ? ranking.map((x) => barRowHTML(x.label, x.value, maxLitros)).join('') : mutedNote('Todavía no hay producción registrada esta semana.')}
+          </div>
+          <div class="panel">
+            <div class="panel__header"><div><h3>Producción reciente</h3><p></p></div><a class="panel__link" href="#/produccionLeche">Ver todas${UI.icon('chevronRight', { size: 12 })}</a></div>
+            ${recientes.length ? `<div class="activity-list">${recientes.map(produccionActivityHTML).join('')}</div>` : mutedNote('Todavía no hay producción registrada.')}
+          </div>
+        </div>
+        <div class="dash-col">
+          <div class="panel">
+            <div class="panel__header"><div><h3>Tambos</h3><p>Último registro por establecimiento</p></div></div>
+            ${tambos.length ? `<div class="mini-list">${tambos.map((t) => {
+              const ultima = ultimaPorTambo[t.id];
+              return `<div class="mini-list__row"><span>${UI.escapeHTML(t.nombre)}</span><b>${ultima ? `${UI.formatNumber(ultima.litros, 0)} L` : '—'}</b></div>`;
+            }).join('')}</div>` : mutedNote('Todavía no hay tambos registrados.')}
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('addProduccionBtn').addEventListener('click', () => openProduccionForm());
+  }
+
+  /* ============================================================
+     TAMBOS (establecimientos)
+     ============================================================ */
+
+  function renderTambos(root) {
+    const f = state.filters.tambos;
+    root.innerHTML = `
+      <div class="view-header">
+        <div class="view-header__text"><h2>Tambos</h2><p>${DB.count('tambos')} tambo(s) registrados en el sistema</p></div>
+        <div class="view-header__actions"><button class="btn btn--primary" id="addTamboBtn" type="button">${UI.icon('plus', { size: 15 })}<span>Nuevo tambo</span></button></div>
+      </div>
+      <div class="toolbar">
+        <div class="toolbar__search">${UI.icon('search', { size: 15 })}<input id="tamboSearch" placeholder="Buscar por nombre o ubicación…" value="${UI.escapeHTML(f.search)}"></div>
+        <select id="tamboEstadoFilter"><option value="">Todos los estados</option>${enumOptions(DB.ENUMS.estadosTambo, f.estado)}</select>
+        <button class="toolbar__reset" id="tamboResetBtn" type="button">${UI.icon('refresh', { size: 13 })}<span>Limpiar filtros</span></button>
+        <span class="toolbar__count" id="tamboResultCount"></span>
+      </div>
+      <div id="tamboResults"></div>`;
+
+    document.getElementById('addTamboBtn').addEventListener('click', () => openTamboForm());
+    document.getElementById('tamboSearch').addEventListener('input', UI.debounce((e) => { f.search = e.target.value; renderTamboResults(); }, 180));
+    document.getElementById('tamboEstadoFilter').addEventListener('change', (e) => { f.estado = e.target.value; renderTamboResults(); });
+    document.getElementById('tamboResetBtn').addEventListener('click', () => { f.search = ''; f.estado = ''; renderTambos(root); });
+    renderTamboResults();
+  }
+
+  function getFilteredTambos() {
+    const f = state.filters.tambos;
+    const q = f.search.trim().toLowerCase();
+    return DB.getAll('tambos')
+      .filter((t) => !f.estado || t.estado === f.estado)
+      .filter((t) => !q || `${t.nombre} ${t.ubicacion}`.toLowerCase().includes(q))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  }
+
+  function renderTamboResults() {
+    const wrap = document.getElementById('tamboResults');
+    const list = getFilteredTambos();
+    document.getElementById('tamboResultCount').textContent = `${list.length} resultado(s)`;
+    if (!list.length) {
+      wrap.innerHTML = UI.emptyState({
+        iconName: 'pin',
+        title: DB.count('tambos') ? 'Sin coincidencias' : 'Todavía no hay tambos',
+        message: DB.count('tambos') ? 'Probá ajustar los filtros de búsqueda.' : 'Registrá tu primer tambo para empezar a llevar la producción lechera.',
+        actionLabel: DB.count('tambos') ? '' : 'Nuevo tambo',
+        actionAttr: 'id="emptyAddTambo"',
+      });
+      const emptyBtn = document.getElementById('emptyAddTambo');
+      if (emptyBtn) emptyBtn.addEventListener('click', () => openTamboForm());
+      return;
+    }
+    wrap.innerHTML = `<div class="card-grid">${list.map(tamboCardHTML).join('')}</div>`;
+    wrap.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openTamboForm(btn.dataset.edit)));
+    wrap.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => deleteTambo(btn.dataset.delete)));
+    wrap.querySelectorAll('[data-map]').forEach((btn) => btn.addEventListener('click', () => {
+      const id = btn.dataset.map;
+      navigate('mapaTambos');
+      setTimeout(() => focusTamboOnMap(id), 300);
+    }));
+  }
+
+  function tamboCardHTML(t) {
+    const deps = DB.dependentsOfTambo(t.id);
+    const ultima = DB.getAll('produccionLeche').filter((p) => p.tamboId === t.id).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
+    return `
+      <article class="record-card" data-id="${t.id}">
+        <div class="record-card__head">
+          <div>
+            <h4 class="record-card__title">${UI.escapeHTML(t.nombre)}</h4>
+            <div class="record-card__meta">${UI.icon('pin', { size: 12 })}<span>${UI.escapeHTML(t.ubicacion)}</span></div>
+          </div>
+          ${UI.badge(t.estado, UI.ESTADO_VARIANT[t.estado] || 'neutral')}
+        </div>
+        <div class="record-card__stats">
+          <div class="record-card__stat"><span>Dotación</span><b>${UI.formatNumber(t.dotacionVacas)} vacas</b></div>
+          <div class="record-card__stat"><span>Último registro</span><b>${ultima ? `${UI.formatNumber(ultima.litros, 0)} L` : '—'}</b></div>
+          <div class="record-card__stat"><span>Registros</span><b>${deps.produccion}</b></div>
+        </div>
+        ${t.comprador ? `<p class="record-card__note">Comprador: ${UI.escapeHTML(t.comprador)}</p>` : ''}
+        ${t.observaciones ? `<p class="record-card__note">${UI.escapeHTML(t.observaciones)}</p>` : ''}
+        <div class="record-card__foot">
+          <span class="text-muted" style="font-size:11.5px">${ultima ? `Último registro ${UI.formatDate(ultima.fecha)}` : 'Sin producción registrada'}</span>
+          <div class="record-card__actions">
+            ${Number.isFinite(t.lat) && Number.isFinite(t.lng) ? `<button class="icon-btn" data-map="${t.id}" type="button" aria-label="Ver en mapa">${UI.icon('map', { size: 15 })}</button>` : ''}
+            <button class="icon-btn" data-edit="${t.id}" type="button" aria-label="Editar">${UI.icon('edit', { size: 15 })}</button>
+            <button class="icon-btn icon-btn--danger" data-delete="${t.id}" type="button" aria-label="Eliminar">${UI.icon('trash', { size: 15 })}</button>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  function openTamboForm(id) {
+    const editing = id ? DB.getById('tambos', id) : null;
+    UI.openModal({
+      title: editing ? 'Editar tambo' : 'Nuevo tambo',
+      subtitle: editing ? editing.nombre : 'Completá los datos del establecimiento',
+      bodyHTML: `
+        <form id="tamboForm" class="form-grid" novalidate>
+          <div class="form-group form-group--full">
+            <label for="tf-nombre">Nombre del tambo <span class="req">*</span></label>
+            <input class="form-control" id="tf-nombre" name="nombre" placeholder="Ej: Tambo La Aurora" value="${editing ? UI.escapeHTML(editing.nombre) : ''}">
+            <span class="form-error"></span>
+          </div>
+          <div class="form-group">
+            <label for="tf-dotacion">Dotación de vacas <span class="req">*</span></label>
+            <input class="form-control" id="tf-dotacion" name="dotacionVacas" type="number" min="1" step="1" placeholder="0" value="${editing ? editing.dotacionVacas : ''}">
+            <span class="form-error"></span>
+          </div>
+          <div class="form-group">
+            <label for="tf-estado">Estado <span class="req">*</span></label>
+            <select class="form-control" id="tf-estado" name="estado">
+              <option value="">Seleccionar…</option>
+              ${enumOptions(DB.ENUMS.estadosTambo, editing ? editing.estado : '')}
+            </select>
+            <span class="form-error"></span>
+          </div>
+          <div class="form-group form-group--full">
+            <label for="tf-ubicacion">Ubicación <span class="req">*</span></label>
+            <input class="form-control" id="tf-ubicacion" name="ubicacion" placeholder="Ej: Sector Norte, junto al Lote Norte" value="${editing ? UI.escapeHTML(editing.ubicacion) : ''}">
+            <span class="form-error"></span>
+          </div>
+          <div class="form-group form-group--full">
+            <label for="tf-comprador">Comprador / planta láctea <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
+            <input class="form-control" id="tf-comprador" name="comprador" placeholder="Ej: SanCor" value="${editing ? UI.escapeHTML(editing.comprador || '') : ''}">
+          </div>
+          <div class="form-group form-group--full">
+            <label for="tf-observaciones">Observaciones</label>
+            <textarea class="form-control" id="tf-observaciones" name="observaciones" placeholder="Notas adicionales sobre el tambo (opcional)">${editing ? UI.escapeHTML(editing.observaciones || '') : ''}</textarea>
+          </div>
+          <div class="form-group form-group--full">
+            <label for="tf-mapsurl">Ubicación en el mapa <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
+            <input class="form-control" id="tf-mapsurl" name="mapsUrl" placeholder="Pegá un enlace de Google Maps, ej: https://maps.google.com/@-33.87,-60.58,15z">
+            <span class="form-hint" id="tf-mapsurl-hint">Pegá un enlace de Google Maps para completar la latitud y longitud automáticamente, o ingresalas manualmente abajo.</span>
+          </div>
+          <div class="form-group">
+            <label for="tf-lat">Latitud</label>
+            <input class="form-control" id="tf-lat" name="lat" type="number" step="0.000001" placeholder="-33.870000" value="${editing && editing.lat !== null && editing.lat !== undefined ? editing.lat : ''}">
+          </div>
+          <div class="form-group">
+            <label for="tf-lng">Longitud</label>
+            <input class="form-control" id="tf-lng" name="lng" type="number" step="0.000001" placeholder="-60.578000" value="${editing && editing.lng !== null && editing.lng !== undefined ? editing.lng : ''}">
+          </div>
+          <div class="form-group form-group--full" id="tf-maps-preview-wrap" style="display:none">
+            <a class="form-hint" id="tf-maps-preview-link" href="#" target="_blank" rel="noopener">${UI.icon('upRight', { size: 11 })} Ver ubicación en Google Maps</a>
+          </div>
+        </form>`,
+      footerHTML: `
+        <button class="btn btn--ghost" type="button" data-act="cancel">Cancelar</button>
+        <button class="btn btn--primary" type="submit" form="tamboForm">${editing ? 'Guardar cambios' : 'Crear tambo'}</button>`,
+      onMount: (mroot) => {
+        mroot.querySelector('[data-act="cancel"]').addEventListener('click', UI.closeModal);
+        mroot.querySelector('#tamboForm').addEventListener('submit', (e) => { e.preventDefault(); submitTamboForm(e.target, editing); });
+
+        const mapsUrlInput = mroot.querySelector('#tf-mapsurl');
+        const latInput = mroot.querySelector('#tf-lat');
+        const lngInput = mroot.querySelector('#tf-lng');
+        const previewWrap = mroot.querySelector('#tf-maps-preview-wrap');
+        const previewLink = mroot.querySelector('#tf-maps-preview-link');
+        const hint = mroot.querySelector('#tf-mapsurl-hint');
+
+        function updatePreviewLink() {
+          const lat = parseFloat(latInput.value);
+          const lng = parseFloat(lngInput.value);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            previewLink.href = `https://www.google.com/maps?q=${lat},${lng}`;
+            previewWrap.style.display = '';
+          } else {
+            previewWrap.style.display = 'none';
+          }
+        }
+        updatePreviewLink();
+        [latInput, lngInput].forEach((inp) => inp.addEventListener('input', updatePreviewLink));
+
+        mapsUrlInput.addEventListener('change', () => {
+          const parsed = parseGoogleMapsUrl(mapsUrlInput.value);
+          if (parsed) {
+            latInput.value = parsed.lat;
+            lngInput.value = parsed.lng;
+            updatePreviewLink();
+            hint.style.color = 'var(--success)';
+            hint.textContent = isWithinArgentinaBBox(parsed.lat, parsed.lng)
+              ? 'Coordenadas detectadas correctamente.'
+              : 'Coordenadas detectadas (parecen estar fuera de Argentina, verificalas).';
+          } else if (mapsUrlInput.value.trim()) {
+            hint.style.color = 'var(--danger)';
+            hint.textContent = 'No pudimos detectar coordenadas en ese enlace. Ingresá la latitud y longitud manualmente.';
+          } else {
+            hint.style.color = '';
+            hint.textContent = 'Pegá un enlace de Google Maps para completar la latitud y longitud automáticamente, o ingresalas manualmente abajo.';
+          }
+        });
+      },
+    });
+  }
+
+  function submitTamboForm(form, editing) {
+    const nombre = validateRequired(form, 'nombre', 'Ingresá el nombre del tambo');
+    const dotacionVacas = validateNumber(form, 'dotacionVacas', { min: 1 });
+    const ubicacion = validateRequired(form, 'ubicacion', 'Ingresá la ubicación');
+    const estado = validateRequired(form, 'estado', 'Seleccioná un estado');
+    const comprador = form.querySelector('[name="comprador"]').value.trim();
+    const observaciones = form.querySelector('[name="observaciones"]').value.trim();
+    const latRaw = form.querySelector('[name="lat"]').value.trim();
+    const lngRaw = form.querySelector('[name="lng"]').value.trim();
+    const lat = latRaw ? Number(latRaw) : null;
+    const lng = lngRaw ? Number(lngRaw) : null;
+    if (!nombre || dotacionVacas === null || !ubicacion || !estado) return;
+    if ((lat === null) !== (lng === null)) {
+      UI.toast('Completá tanto la latitud como la longitud, o dejá ambas vacías.', 'error', 'Coordenadas incompletas');
+      return;
+    }
+    const payload = { nombre, dotacionVacas, ubicacion, estado, comprador, observaciones, lat, lng };
+    if (editing) {
+      DB.update('tambos', editing.id, payload);
+      UI.toast(`"${nombre}" se actualizó correctamente.`, 'success', 'Tambo actualizado');
+    } else {
+      DB.create('tambos', 'tam', payload);
+      UI.toast(`"${nombre}" se agregó al sistema.`, 'success', 'Tambo creado');
+    }
+    UI.closeModal();
+    refreshCurrentView();
+  }
+
+  async function deleteTambo(id) {
+    const tambo = DB.getById('tambos', id);
+    if (!tambo) return;
+    const deps = DB.dependentsOfTambo(id);
+    const message = deps.produccion > 0
+      ? `Se eliminará <strong>${UI.escapeHTML(tambo.nombre)}</strong> junto con ${deps.produccion} registro(s) de producción asociados. Esta acción no se puede deshacer.`
+      : `Se eliminará <strong>${UI.escapeHTML(tambo.nombre)}</strong> del sistema. Esta acción no se puede deshacer.`;
+    const ok = await UI.confirmDialog({ title: 'Eliminar tambo', message, confirmLabel: 'Eliminar tambo', tone: 'danger' });
+    if (!ok) return;
+    DB.getAll('produccionLeche').filter((p) => p.tamboId === id).forEach((p) => DB.remove('produccionLeche', p.id));
+    DB.remove('tambos', id);
+    UI.toast('El tambo fue eliminado.', 'success', 'Tambo eliminado');
+    refreshCurrentView();
+  }
+
+  /* ============================================================
+     PRODUCCIÓN DE LECHE
+     ============================================================ */
+
+  function renderProduccionLeche(root) {
+    const f = state.filters.produccionLeche;
+    const tambos = DB.getAll('tambos').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    root.innerHTML = `
+      <div class="view-header">
+        <div class="view-header__text"><h2>Producción de leche</h2><p>${DB.count('produccionLeche')} registro(s) de producción</p></div>
+        <div class="view-header__actions"><button class="btn btn--primary" id="addProduccionBtn" type="button">${UI.icon('plus', { size: 15 })}<span>Nueva producción</span></button></div>
+      </div>
+      <div class="toolbar">
+        <select id="prlTamboFilter"><option value="">Todos los tambos</option>${selectOptionsPlain(tambos, f.tamboId)}</select>
+        <select id="prlTurnoFilter"><option value="">Todos los turnos</option>${enumOptions(DB.ENUMS.turnosOrdeñe, f.turno)}</select>
+        <div class="toolbar__field"><input type="date" id="prlDesde" value="${f.desde}" title="Desde"></div>
+        <div class="toolbar__field"><input type="date" id="prlHasta" value="${f.hasta}" title="Hasta"></div>
+        <button class="toolbar__reset" id="prlResetBtn" type="button">${UI.icon('refresh', { size: 13 })}<span>Limpiar filtros</span></button>
+        <span class="toolbar__count" id="prlResultCount"></span>
+      </div>
+      <div id="prlResults"></div>`;
+
+    document.getElementById('addProduccionBtn').addEventListener('click', () => openProduccionForm());
+    document.getElementById('prlTamboFilter').addEventListener('change', (e) => { f.tamboId = e.target.value; renderProduccionResults(); });
+    document.getElementById('prlTurnoFilter').addEventListener('change', (e) => { f.turno = e.target.value; renderProduccionResults(); });
+    document.getElementById('prlDesde').addEventListener('change', (e) => { f.desde = e.target.value; renderProduccionResults(); });
+    document.getElementById('prlHasta').addEventListener('change', (e) => { f.hasta = e.target.value; renderProduccionResults(); });
+    document.getElementById('prlResetBtn').addEventListener('click', () => { Object.assign(f, { tamboId: '', turno: '', desde: '', hasta: '' }); renderProduccionLeche(root); });
+    renderProduccionResults();
+  }
+
+  function getFilteredProduccion() {
+    const f = state.filters.produccionLeche;
+    return DB.getAll('produccionLeche')
+      .filter((p) => !f.tamboId || p.tamboId === f.tamboId)
+      .filter((p) => !f.turno || p.turno === f.turno)
+      .filter((p) => !f.desde || p.fecha >= f.desde)
+      .filter((p) => !f.hasta || p.fecha <= f.hasta)
+      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  }
+
+  function renderProduccionResults() {
+    const wrap = document.getElementById('prlResults');
+    const list = getFilteredProduccion();
+    document.getElementById('prlResultCount').textContent = `${list.length} resultado(s)`;
+    if (!list.length) {
+      wrap.innerHTML = UI.emptyState({
+        iconName: 'droplet',
+        title: DB.count('produccionLeche') ? 'Sin coincidencias' : 'Todavía no hay producción registrada',
+        message: DB.count('produccionLeche') ? 'Probá ajustar los filtros de búsqueda.' : 'Registrá los litros y las vacas ordeñadas de cada día.',
+        actionLabel: DB.count('produccionLeche') ? '' : 'Nueva producción',
+        actionAttr: 'id="emptyAddProduccion"',
+      });
+      const btn = document.getElementById('emptyAddProduccion');
+      if (btn) btn.addEventListener('click', () => openProduccionForm());
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="table-wrap"><div class="table-scroll"><table class="data-table">
+        <thead><tr><th>Fecha</th><th>Tambo</th><th>Turno</th><th>Litros</th><th>Vacas ordeñadas</th><th>L/vaca</th><th>Calidad</th><th></th></tr></thead>
+        <tbody>${list.map(produccionRowHTML).join('')}</tbody>
+      </table></div></div>`;
+    wrap.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProduccionForm(btn.dataset.edit)));
+    wrap.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => deleteProduccion(btn.dataset.delete)));
+  }
+
+  function produccionRowHTML(p) {
+    const lVaca = p.vacasOrdeñadas ? p.litros / p.vacasOrdeñadas : 0;
+    const calidad = (p.grasaPct || p.proteinaPct)
+      ? `${p.grasaPct ? `${UI.formatNumber(p.grasaPct, 1)}% grasa` : ''}${p.grasaPct && p.proteinaPct ? ' · ' : ''}${p.proteinaPct ? `${UI.formatNumber(p.proteinaPct, 1)}% prot.` : ''}`
+      : '<span class="text-muted">—</span>';
+    return `<tr data-id="${p.id}">
+      <td class="cell-muted">${UI.formatDate(p.fecha)}</td>
+      <td class="cell-strong">${UI.escapeHTML(tamboName(p.tamboId))}</td>
+      <td>${UI.badge(p.turno, 'muted')}</td>
+      <td class="cell-num">${UI.formatNumber(p.litros, 0)} L</td>
+      <td class="cell-num">${UI.formatNumber(p.vacasOrdeñadas)}</td>
+      <td class="cell-num">${UI.formatNumber(lVaca, 1)}</td>
+      <td>${calidad}</td>
+      <td class="cell-actions">
+        <button class="icon-btn" data-edit="${p.id}" type="button" aria-label="Editar">${UI.icon('edit', { size: 15 })}</button>
+        <button class="icon-btn icon-btn--danger" data-delete="${p.id}" type="button" aria-label="Eliminar">${UI.icon('trash', { size: 15 })}</button>
+      </td>
+    </tr>`;
+  }
+
+  function openProduccionForm(id) {
+    const editing = id ? DB.getById('produccionLeche', id) : null;
+    const tambos = DB.getAll('tambos').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    if (!tambos.length) {
+      UI.toast('Registrá primero un tambo antes de cargar producción.', 'warning', 'Sin tambos');
+      return;
+    }
+    UI.openModal({
+      title: editing ? 'Editar producción' : 'Nueva producción',
+      subtitle: editing ? `${tamboName(editing.tamboId)} · ${UI.formatDate(editing.fecha)}` : 'Registrá los litros y vacas ordeñadas del día',
+      bodyHTML: `
+        <form id="prlForm" class="form-grid" novalidate>
+          <div class="form-group"><label for="pf-fecha">Fecha <span class="req">*</span></label><input class="form-control" type="date" id="pf-fecha" name="fecha" value="${editing ? editing.fecha : todayISO()}"><span class="form-error"></span></div>
+          <div class="form-group"><label for="pf-tambo">Tambo <span class="req">*</span></label><select class="form-control" id="pf-tambo" name="tamboId">${loteCultivoOptions(tambos, editing ? editing.tamboId : '', 'Seleccionar tambo…')}</select><span class="form-error"></span></div>
+          <div class="form-group"><label for="pf-turno">Turno <span class="req">*</span></label><select class="form-control" id="pf-turno" name="turno"><option value="">Seleccionar…</option>${enumOptions(DB.ENUMS.turnosOrdeñe, editing ? editing.turno : 'Día completo')}</select><span class="form-error"></span></div>
+          <div class="form-group"><label for="pf-litros">Litros <span class="req">*</span></label><input class="form-control" type="number" min="0" step="1" id="pf-litros" name="litros" value="${editing ? editing.litros : ''}"><span class="form-error"></span></div>
+          <div class="form-group"><label for="pf-vacas">Vacas ordeñadas <span class="req">*</span></label><input class="form-control" type="number" min="1" step="1" id="pf-vacas" name="vacasOrdeñadas" value="${editing ? editing.vacasOrdeñadas : ''}"><span class="form-error"></span></div>
+          <div class="form-group"><label for="pf-precio">Precio por litro <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label><input class="form-control" type="number" min="0" step="0.01" id="pf-precio" name="precioPorLitro" value="${editing && editing.precioPorLitro !== null && editing.precioPorLitro !== undefined ? editing.precioPorLitro : ''}"></div>
+          <div class="form-group"><label for="pf-grasa">% Grasa <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label><input class="form-control" type="number" min="0" step="0.1" id="pf-grasa" name="grasaPct" value="${editing && editing.grasaPct !== null && editing.grasaPct !== undefined ? editing.grasaPct : ''}"></div>
+          <div class="form-group"><label for="pf-proteina">% Proteína <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label><input class="form-control" type="number" min="0" step="0.1" id="pf-proteina" name="proteinaPct" value="${editing && editing.proteinaPct !== null && editing.proteinaPct !== undefined ? editing.proteinaPct : ''}"></div>
+          <div class="form-group"><label for="pf-celulas">Células somáticas (miles/mL) <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label><input class="form-control" type="number" min="0" step="1" id="pf-celulas" name="celulasSomaticas" value="${editing && editing.celulasSomaticas !== null && editing.celulasSomaticas !== undefined ? editing.celulasSomaticas : ''}"></div>
+          <div class="form-group form-group--full"><label for="pf-observaciones">Observaciones</label><textarea class="form-control" id="pf-observaciones" name="observaciones" placeholder="Notas adicionales (opcional)">${editing ? UI.escapeHTML(editing.observaciones || '') : ''}</textarea></div>
+        </form>`,
+      footerHTML: `<button class="btn btn--ghost" type="button" data-act="cancel">Cancelar</button><button class="btn btn--primary" type="submit" form="prlForm">${editing ? 'Guardar cambios' : 'Crear producción'}</button>`,
+      onMount: (mroot) => {
+        mroot.querySelector('[data-act="cancel"]').addEventListener('click', UI.closeModal);
+        mroot.querySelector('#prlForm').addEventListener('submit', (e) => { e.preventDefault(); submitProduccionForm(e.target, editing); });
+      },
+    });
+  }
+
+  function submitProduccionForm(form, editing) {
+    const fecha = validateRequired(form, 'fecha', 'Seleccioná una fecha');
+    const tamboId = validateRequired(form, 'tamboId', 'Seleccioná un tambo');
+    const turno = validateRequired(form, 'turno', 'Seleccioná un turno');
+    const litros = validateNumber(form, 'litros', { min: 0 });
+    const vacasOrdeñadas = validateNumber(form, 'vacasOrdeñadas', { min: 1 });
+    const precioRaw = form.querySelector('[name="precioPorLitro"]').value.trim();
+    const grasaRaw = form.querySelector('[name="grasaPct"]').value.trim();
+    const proteinaRaw = form.querySelector('[name="proteinaPct"]').value.trim();
+    const celulasRaw = form.querySelector('[name="celulasSomaticas"]').value.trim();
+    const observaciones = form.querySelector('[name="observaciones"]').value.trim();
+    if (!fecha || !tamboId || !turno || litros === null || vacasOrdeñadas === null) return;
+    const payload = {
+      fecha, tamboId, turno, litros, vacasOrdeñadas,
+      precioPorLitro: precioRaw ? Number(precioRaw) : null,
+      grasaPct: grasaRaw ? Number(grasaRaw) : null,
+      proteinaPct: proteinaRaw ? Number(proteinaRaw) : null,
+      celulasSomaticas: celulasRaw ? Number(celulasRaw) : null,
+      observaciones,
+    };
+    if (editing) {
+      DB.update('produccionLeche', editing.id, payload);
+      UI.toast('El registro se actualizó correctamente.', 'success', 'Producción actualizada');
+    } else {
+      DB.create('produccionLeche', 'prl', payload);
+      UI.toast('El registro de producción se creó correctamente.', 'success', 'Producción creada');
+    }
+    UI.closeModal();
+    refreshCurrentView();
+  }
+
+  async function deleteProduccion(id) {
+    const p = DB.getById('produccionLeche', id);
+    if (!p) return;
+    const ok = await UI.confirmDialog({ title: 'Eliminar producción', message: `Se eliminará este registro de producción de <strong>${UI.escapeHTML(tamboName(p.tamboId))}</strong> (${UI.formatDate(p.fecha)}). Esta acción no se puede deshacer.`, confirmLabel: 'Eliminar registro', tone: 'danger' });
+    if (!ok) return;
+    DB.remove('produccionLeche', id);
+    UI.toast('El registro fue eliminado.', 'success', 'Producción eliminada');
+    refreshCurrentView();
+  }
+
+  /* ============================================================
+     MAPA DE TAMBOS
+     ============================================================ */
+
+  function renderMapaTambos(root) {
+    const tambos = DB.getAll('tambos');
+    const ubicados = tambos.filter((t) => Number.isFinite(t.lat) && Number.isFinite(t.lng));
+    const sinUbicar = tambos.filter((t) => !(Number.isFinite(t.lat) && Number.isFinite(t.lng)));
+
+    root.innerHTML = `
+      <div class="view-header">
+        <div class="view-header__text"><h2>Mapa de tambos</h2><p>${ubicados.length} de ${tambos.length} tambo(s) ubicados en el mapa</p></div>
+        <div class="view-header__actions">
+          <button class="btn btn--secondary" id="mapFitArgentinaTambos" type="button">${UI.icon('map', { size: 14 })}<span>Toda Argentina</span></button>
+          <button class="btn btn--primary" id="mapFitTambos" type="button" ${!ubicados.length ? 'disabled' : ''}>${UI.icon('pin', { size: 14 })}<span>Centrar en mis tambos</span></button>
+        </div>
+      </div>
+      <div class="map-layout">
+        <div class="map-container" id="tambosMap"></div>
+        <aside class="map-sidebar">
+          <div class="map-sidebar__section">
+            <h3>Tambos ubicados <span class="map-sidebar__count">${ubicados.length}</span></h3>
+            ${ubicados.length
+              ? `<div class="map-list">${ubicados.map((t) => mapListItemHTMLTambo(t, true)).join('')}</div>`
+              : `<p class="text-muted" style="font-size:12.4px;padding:4px 2px">Todavía no ubicaste ningún tambo en el mapa. Editá un tambo y pegá un enlace de Google Maps o sus coordenadas.</p>`}
+          </div>
+          ${sinUbicar.length ? `
+          <div class="map-sidebar__section">
+            <h3>Sin coordenadas <span class="map-sidebar__count map-sidebar__count--muted">${sinUbicar.length}</span></h3>
+            <div class="map-list">${sinUbicar.map((t) => mapListItemHTMLTambo(t, false)).join('')}</div>
+          </div>` : ''}
+        </aside>
+      </div>`;
+
+    initTambosMap(ubicados);
+
+    root.querySelectorAll('[data-focus]').forEach((btn) => btn.addEventListener('click', () => focusTamboOnMap(btn.dataset.focus)));
+    root.querySelectorAll('[data-edit-from-map]').forEach((btn) => btn.addEventListener('click', () => openTamboForm(btn.dataset.editFromMap)));
+
+    document.getElementById('mapFitArgentinaTambos').addEventListener('click', () => {
+      if (mapInstance) mapInstance.setView(ARGENTINA_CENTER, 4);
+    });
+    const fitBtn = document.getElementById('mapFitTambos');
+    if (fitBtn) fitBtn.addEventListener('click', () => fitMapToTambos(ubicados));
+  }
+
+  function mapListItemHTMLTambo(t, hasCoords) {
+    const attr = hasCoords ? `data-focus="${t.id}"` : `data-edit-from-map="${t.id}"`;
+    return `
+      <button type="button" class="map-list__item" ${attr}>
+        <span class="map-list__dot" style="background:${ESTADO_DOT_COLOR[t.estado] || 'var(--text-muted)'}"></span>
+        <span class="map-list__body">
+          <strong>${UI.escapeHTML(t.nombre)}</strong>
+          <span>${UI.escapeHTML(t.ubicacion)}</span>
+        </span>
+        ${!hasCoords ? `<span class="map-list__hint">${UI.icon('edit', { size: 12 })}</span>` : ''}
+      </button>`;
+  }
+
+  function mapPopupHTMLTambo(t) {
+    const ultima = DB.getAll('produccionLeche').filter((p) => p.tamboId === t.id).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
+    return `
+      <div class="map-popup">
+        <div class="map-popup__head">
+          <h4>${UI.escapeHTML(t.nombre)}</h4>
+          ${UI.badge(t.estado, UI.ESTADO_VARIANT[t.estado] || 'neutral')}
+        </div>
+        <p class="map-popup__loc">${UI.icon('pin', { size: 12 })}<span>${UI.escapeHTML(t.ubicacion)}</span></p>
+        <div class="map-popup__stats">
+          <span>${UI.formatNumber(t.dotacionVacas)} vacas</span>
+          <span>${ultima ? `${UI.formatNumber(ultima.litros, 0)} L último` : 'Sin producción'}</span>
+        </div>
+        ${t.observaciones ? `<p class="map-popup__note">${UI.escapeHTML(t.observaciones)}</p>` : ''}
+        <div class="map-popup__actions">
+          <button type="button" data-popup-edit>${UI.icon('edit', { size: 12 })}<span>Editar tambo</span></button>
+          <a href="https://www.google.com/maps?q=${t.lat},${t.lng}" target="_blank" rel="noopener">${UI.icon('upRight', { size: 11 })}<span>Google Maps</span></a>
+        </div>
+      </div>`;
+  }
+
+  function initTambosMap(ubicados) {
+    const container = document.getElementById('tambosMap');
+    if (!container) return;
+    if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+    mapMarkers = {};
+
+    if (typeof L === 'undefined') {
+      container.innerHTML = `<div class="map-offline">${UI.icon('alert-circle', { size: 24 })}<p>No se pudo cargar el mapa.</p><span>Verificá tu conexión a internet e intentá de nuevo.</span></div>`;
+      return;
+    }
+
+    mapInstance = L.map(container, { scrollWheelZoom: true }).setView(ARGENTINA_CENTER, 4);
+    mapInstance.createPane('streetPane');
+
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> — Source: Esri, Maxar, Earthstar Geographics',
+    });
+    const labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Labels &copy; Esri',
+    });
+    const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      pane: 'streetPane',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+    });
+    satelliteLayer.addTo(mapInstance);
+    labelsLayer.addTo(mapInstance);
+
+    const LayerToggle = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        const div = L.DomUtil.create('div', 'map-layer-toggle');
+        div.innerHTML = `
+          <button type="button" class="map-layer-toggle__btn is-active" data-layer="satellite">${UI.icon('map', { size: 13 })}<span>Satélite</span></button>
+          <button type="button" class="map-layer-toggle__btn" data-layer="street">${UI.icon('grid', { size: 13 })}<span>Calles</span></button>`;
+        L.DomEvent.disableClickPropagation(div);
+        div.querySelectorAll('button').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (btn.classList.contains('is-active')) return;
+            div.querySelectorAll('button').forEach((b) => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            if (btn.dataset.layer === 'satellite') {
+              mapInstance.removeLayer(streetLayer);
+              satelliteLayer.addTo(mapInstance);
+              labelsLayer.addTo(mapInstance);
+            } else {
+              mapInstance.removeLayer(satelliteLayer);
+              mapInstance.removeLayer(labelsLayer);
+              streetLayer.addTo(mapInstance);
+            }
+          });
+        });
+        return div;
+      },
+    });
+    new LayerToggle().addTo(mapInstance);
+
+    ubicados.forEach((t) => {
+      const marker = L.marker([t.lat, t.lng], { icon: buildPinIcon(t.estado) }).addTo(mapInstance);
+      marker.bindPopup(mapPopupHTMLTambo(t), { closeButton: true, className: 'agro-popup', minWidth: 230 });
+      marker.on('popupopen', (e) => {
+        const node = e.popup.getElement();
+        const editBtn = node && node.querySelector('[data-popup-edit]');
+        if (editBtn) editBtn.addEventListener('click', () => openTamboForm(t.id));
+      });
+      mapMarkers[t.id] = marker;
+    });
+
+    setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 150);
+  }
+
+  function focusTamboOnMap(id) {
+    const marker = mapMarkers[id];
+    if (!mapInstance || !marker) return;
+    mapInstance.setView(marker.getLatLng(), 13, { animate: true });
+    marker.openPopup();
+  }
+
+  function fitMapToTambos(ubicados) {
+    if (!mapInstance || !ubicados.length) return;
+    if (ubicados.length === 1) {
+      mapInstance.setView([ubicados[0].lat, ubicados[0].lng], 13, { animate: true });
+      return;
+    }
+    const bounds = L.latLngBounds(ubicados.map((t) => [t.lat, t.lng]));
+    mapInstance.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
   }
 
 })();

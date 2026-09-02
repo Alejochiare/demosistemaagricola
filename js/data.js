@@ -20,6 +20,8 @@ const DB = (() => {
     tiposSanidadAnimal: ['Vacunación', 'Desparasitación', 'Tratamiento', 'Otro'],
     tiposReproduccion: ['Servicio', 'Diagnóstico de preñez', 'Parto'],
     metodosServicio: ['Monta natural', 'Inseminación artificial'],
+    estadosTambo: ['Activo', 'Inactivo'],
+    turnosOrdeñe: ['Mañana', 'Tarde', 'Día completo'],
   };
 
   const DEFAULT_PRICES_BY_CULTIVO_NAME = {
@@ -153,10 +155,33 @@ const DB = (() => {
       { id: 'pes_p5', fecha: isoDaysAgo(90), categoriaId: 'cat_c1', loteId: 'lot_a4', cantidadAnimales: 12, pesoPromedioKg: 95, observaciones: 'Control de recría.' },
     ];
 
+    const tambos = [
+      { id: 'tam_t1', nombre: 'Tambo La Aurora', ubicacion: 'Sector Norte, junto al Lote Norte', dotacionVacas: 85, estado: 'Activo', comprador: 'SanCor', observaciones: 'Ordeñe mecánico, dos turnos diarios.', lat: -33.868, lng: -60.578 },
+      { id: 'tam_t2', nombre: 'Tambo El Rocío', ubicacion: 'Sector Sur, camino al canal principal', dotacionVacas: 60, estado: 'Activo', comprador: 'La Serenísima', observaciones: '', lat: -33.902, lng: -60.565 },
+    ];
+
+    const produccionLeche = [
+      { id: 'prl_1', fecha: isoDaysAgo(6), tamboId: 'tam_t1', turno: 'Día completo', litros: 1840, vacasOrdeñadas: 80, grasaPct: 3.5, proteinaPct: 3.1, celulasSomaticas: 195, precioPorLitro: 0.31, observaciones: '' },
+      { id: 'prl_2', fecha: isoDaysAgo(5), tamboId: 'tam_t1', turno: 'Día completo', litros: 1865, vacasOrdeñadas: 81, grasaPct: 3.6, proteinaPct: 3.2, celulasSomaticas: 205, precioPorLitro: 0.31, observaciones: '' },
+      { id: 'prl_3', fecha: isoDaysAgo(4), tamboId: 'tam_t1', turno: 'Día completo', litros: 1900, vacasOrdeñadas: 82, grasaPct: 3.55, proteinaPct: 3.15, celulasSomaticas: 190, precioPorLitro: 0.32, observaciones: '' },
+      { id: 'prl_4', fecha: isoDaysAgo(3), tamboId: 'tam_t1', turno: 'Día completo', litros: 1780, vacasOrdeñadas: 79, grasaPct: 3.4, proteinaPct: 3.05, celulasSomaticas: 230, precioPorLitro: 0.32, observaciones: 'Baja leve por día de lluvia intensa.' },
+      { id: 'prl_5', fecha: isoDaysAgo(2), tamboId: 'tam_t1', turno: 'Día completo', litros: 1920, vacasOrdeñadas: 83, grasaPct: 3.65, proteinaPct: 3.25, celulasSomaticas: 200, precioPorLitro: 0.33, observaciones: '' },
+      { id: 'prl_6', fecha: isoDaysAgo(1), tamboId: 'tam_t1', turno: 'Día completo', litros: 1955, vacasOrdeñadas: 84, grasaPct: 3.7, proteinaPct: 3.3, celulasSomaticas: 180, precioPorLitro: 0.33, observaciones: '' },
+      { id: 'prl_7', fecha: isoDaysAgo(0), tamboId: 'tam_t1', turno: 'Día completo', litros: 1890, vacasOrdeñadas: 82, grasaPct: null, proteinaPct: null, celulasSomaticas: null, precioPorLitro: null, observaciones: 'Análisis de calidad pendiente de laboratorio.' },
+      { id: 'prl_8', fecha: isoDaysAgo(6), tamboId: 'tam_t2', turno: 'Día completo', litros: 1210, vacasOrdeñadas: 56, grasaPct: 3.8, proteinaPct: 3.3, celulasSomaticas: 175, precioPorLitro: 0.31, observaciones: '' },
+      { id: 'prl_9', fecha: isoDaysAgo(5), tamboId: 'tam_t2', turno: 'Día completo', litros: 1195, vacasOrdeñadas: 55, grasaPct: 3.75, proteinaPct: 3.28, celulasSomaticas: 180, precioPorLitro: 0.31, observaciones: '' },
+      { id: 'prl_10', fecha: isoDaysAgo(4), tamboId: 'tam_t2', turno: 'Día completo', litros: 1230, vacasOrdeñadas: 57, grasaPct: 3.85, proteinaPct: 3.35, celulasSomaticas: 165, precioPorLitro: 0.32, observaciones: '' },
+      { id: 'prl_11', fecha: isoDaysAgo(3), tamboId: 'tam_t2', turno: 'Día completo', litros: 1180, vacasOrdeñadas: 54, grasaPct: 3.7, proteinaPct: 3.25, celulasSomaticas: 190, precioPorLitro: 0.32, observaciones: '' },
+      { id: 'prl_12', fecha: isoDaysAgo(2), tamboId: 'tam_t2', turno: 'Día completo', litros: 1245, vacasOrdeñadas: 58, grasaPct: 3.9, proteinaPct: 3.4, celulasSomaticas: 160, precioPorLitro: 0.33, observaciones: '' },
+      { id: 'prl_13', fecha: isoDaysAgo(1), tamboId: 'tam_t2', turno: 'Día completo', litros: 1260, vacasOrdeñadas: 58, grasaPct: 3.95, proteinaPct: 3.42, celulasSomaticas: 155, precioPorLitro: 0.33, observaciones: '' },
+      { id: 'prl_14', fecha: isoDaysAgo(0), tamboId: 'tam_t2', turno: 'Día completo', litros: 1220, vacasOrdeñadas: 56, grasaPct: null, proteinaPct: null, celulasSomaticas: null, precioPorLitro: null, observaciones: 'Análisis de calidad pendiente de laboratorio.' },
+    ];
+
     return {
       version: SCHEMA_VERSION,
       lotes, cultivos, siembras, fumigaciones, cosechas, notas, insumos, precios,
       categoriasHacienda, movimientosHacienda, sanidadAnimal, reproduccion, pesadas,
+      tambos, produccionLeche,
       settings: { theme: 'light' },
     };
   }
@@ -202,6 +227,16 @@ const DB = (() => {
     return changed;
   }
 
+  function migrateTambos(loadedState) {
+    if (!loadedState) return false;
+    if (Array.isArray(loadedState.tambos) && Array.isArray(loadedState.produccionLeche)) return false;
+    const seed = buildSeed();
+    let changed = false;
+    if (!Array.isArray(loadedState.tambos)) { loadedState.tambos = seed.tambos; changed = true; }
+    if (!Array.isArray(loadedState.produccionLeche)) { loadedState.produccionLeche = seed.produccionLeche; changed = true; }
+    return changed;
+  }
+
   function loadLocal() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -210,7 +245,8 @@ const DB = (() => {
         if (!state || state.version !== SCHEMA_VERSION) throw new Error('schema-mismatch');
         const migratedCoords = migrateLoteCoords(state);
         const migratedPrices = migratePrecios(state);
-        if (migratedCoords || migratedPrices) persistLocal();
+        const migratedTambos = migrateTambos(state);
+        if (migratedCoords || migratedPrices || migratedTambos) persistLocal();
       } else {
         state = buildSeed();
         persistLocal();
@@ -269,8 +305,9 @@ const DB = (() => {
           state = remoteState;
           const migratedCoords = migrateLoteCoords(state);
           const migratedPrices = migratePrecios(state);
+          const migratedTambos = migrateTambos(state);
           persistLocal();
-          if (migratedCoords || migratedPrices) scheduleRemoteSave();
+          if (migratedCoords || migratedPrices || migratedTambos) scheduleRemoteSave();
         }
       } else {
         await persistRemote();
@@ -355,6 +392,12 @@ const DB = (() => {
     };
   }
 
+  function dependentsOfTambo(tamboId) {
+    return {
+      produccion: collection('produccionLeche').filter((p) => p.tamboId === tamboId).length,
+    };
+  }
+
   function getSettings() {
     if (!state) loadLocal();
     return state.settings || (state.settings = { theme: 'light' });
@@ -399,7 +442,7 @@ const DB = (() => {
     ENUMS,
     load, persist, resetToSeed,
     getAll, getById, create, update, remove, count,
-    dependentsOfLote, dependentsOfCultivo,
+    dependentsOfLote, dependentsOfCultivo, dependentsOfTambo,
     getSettings, setSetting,
     getPrecioByCultivo, upsertPrecio,
     adjustInsumoStock,

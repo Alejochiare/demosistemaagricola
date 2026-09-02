@@ -52,6 +52,7 @@ const UI = (() => {
     dollar: '<path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     wind: '<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 13h15a3 3 0 1 1-3 3"/><path d="M3 18h8a2 2 0 1 0-2-2"/>',
     cow: '<path d="M4 9c0-2 1.5-3 3-2.5.5-1.5 2-2.5 5-2.5s4.5 1 5 2.5c1.5-.5 3 .5 3 2.5 0 1.2-.7 2-1.5 2.3.9 1 1.5 2.4 1.5 3.9 0 3.2-3 5.8-8 5.8s-8-2.6-8-5.8c0-1.5.6-2.9 1.5-3.9C4.7 11 4 10.2 4 9Z"/><circle cx="9" cy="13.3" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="13.3" r="1" fill="currentColor" stroke="none"/><path d="M10.3 16.3c.5.5 1 .6 1.7.6s1.2-.1 1.7-.6"/>',
+    milk: '<path d="M9 2h6v4l2 3.5V20a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9.5L9 6V2Z"/><path d="M9 2h6M7 12h10"/>',
     swap: '<path d="M7 7h13l-4-4"/><path d="M17 17H4l4 4"/>',
     cross: '<path d="M12 4v16M4 12h16"/>',
     heart: '<path d="M12 21s-7-4.4-9.5-8.9A5.4 5.4 0 0 1 12 6a5.4 5.4 0 0 1 9.5 6.1C19 16.6 12 21 12 21Z"/>',
